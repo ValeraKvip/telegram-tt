@@ -1,16 +1,16 @@
 import type { FC } from '../../../../lib/teact/teact';
 import React, {
-  memo, useCallback, useEffect, useMemo, useState,
+  memo, useCallback, useEffect, useMemo, useRef, useState,
 } from '../../../../lib/teact/teact';
 import { getActions, getGlobal, withGlobal } from '../../../../global';
 
-import type { ApiChatlistExportedInvite } from '../../../../api/types';
+import type { ApiAvailableReaction, ApiChatlistExportedInvite,  ApiSticker, ApiStickerSet } from '../../../../api/types';
 import type {
   FolderEditDispatch,
   FoldersState,
 } from '../../../../hooks/reducers/useFoldersReducer';
 
-import { STICKER_SIZE_FOLDER_SETTINGS } from '../../../../config';
+import {  STICKER_SIZE_FOLDER_SETTINGS } from '../../../../config';
 import { isUserId } from '../../../../global/helpers';
 import { selectCanShareFolder } from '../../../../global/selectors';
 import { selectCurrentLimit } from '../../../../global/selectors/limits';
@@ -31,6 +31,12 @@ import FloatingActionButton from '../../../ui/FloatingActionButton';
 import InputText from '../../../ui/InputText';
 import ListItem from '../../../ui/ListItem';
 import Spinner from '../../../ui/Spinner';
+import SettingsFoldersEmoticonPicker from './SettingsFolderPickerMenu';
+
+import { FOLDER_ICONS_SET_ID } from '../../../common/icons/FolderIcons';
+import FolderEmoji from '../../main/folders/FolderEmoji';
+import { useIntersectionObserver } from '../../../../hooks/useIntersectionObserver';
+
 
 type OwnProps = {
   state: FoldersState;
@@ -54,6 +60,8 @@ type StateProps = {
   maxInviteLinks: number;
   maxChatLists: number;
   chatListCount: number;
+  availableReactions?: ApiAvailableReaction[];
+  folderSet: ApiStickerSet
 };
 
 const SUBMIT_TIMEOUT = 500;
@@ -88,18 +96,32 @@ const SettingsFoldersEdit: FC<OwnProps & StateProps> = ({
     openLimitReachedModal,
     showNotification,
   } = getActions();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const statusButtonRef = useRef<HTMLDivElement>(null);
+  const sharedCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const isCreating = state.mode === 'create';
   const isEditingChatList = state.folder.isChatList;
 
   const [isIncludedChatsListExpanded, setIsIncludedChatsListExpanded] = useState(false);
   const [isExcludedChatsListExpanded, setIsExcludedChatsListExpanded] = useState(false);
+  const [isReactionPickerOpened, setIsReactionPickerOpened] = useState(false);
+
+  const {
+    observe: observeIntersection,
+  } = useIntersectionObserver({ rootRef: containerRef, throttleMs: 200, isDisabled: false });
 
   useEffect(() => {
     if (isRemoved) {
       onReset();
     }
   }, [isRemoved, onReset]);
+
+  useEffect(()=>{    
+    if(state.doneAndConfirmed){
+      handleSubmit();
+    }
+  },[state.doneAndConfirmed])
 
   useEffect(() => {
     if (isActive && state.folderId && state.folder.isChatList) {
@@ -155,6 +177,25 @@ const SettingsFoldersEdit: FC<OwnProps & StateProps> = ({
     const { currentTarget } = event;
     dispatch({ type: 'setTitle', payload: currentTarget.value.trim() });
   }, [dispatch]);
+
+  const selectEmoticon = useCallback((emoticon: string) => {    
+    setIsReactionPickerOpened(false);
+    dispatch({ type: 'setEmoticon', payload: emoticon });
+  }, [dispatch]);
+
+  const selectEmoji = useCallback((emoji: ApiSticker | string) => {   
+    if (typeof emoji === 'string') {
+      selectEmoticon(emoji);
+    } else {
+      selectCustomEmoji(emoji)
+    }
+  }, [dispatch])
+
+  const selectCustomEmoji = useCallback((sticker: ApiSticker) => {   
+    setIsReactionPickerOpened(false);
+    dispatch({ type: 'setCustomEmoji', payload: sticker.id });
+  }, [dispatch]);
+
 
   const handleSubmit = useCallback(() => {
     dispatch({ type: 'setIsLoading', payload: true });
@@ -295,14 +336,33 @@ const SettingsFoldersEdit: FC<OwnProps & StateProps> = ({
               {lang('FilterIncludeInfo')}
             </p>
           )}
-
-          <InputText
-            className="mb-0"
-            label={lang('FilterNameHint')}
-            value={state.folder.title.text}
-            onChange={handleChange}
-            error={state.error && state.error === ERROR_NO_TITLE ? ERROR_NO_TITLE : undefined}
-          />
+          <div className='folder-name-input-wrapper'>
+            <InputText
+              className="mb-0"
+              label={lang('FilterNameHint')}
+              value={state.folder.title.text}
+              onChange={handleChange}
+              error={state.error && state.error === ERROR_NO_TITLE ? ERROR_NO_TITLE : undefined}
+            />
+            <div
+              ref={statusButtonRef}
+              className={'EmojiPickerToggle'}
+              onClick={() => setIsReactionPickerOpened(!isReactionPickerOpened)}
+            >
+              <canvas ref={sharedCanvasRef} className="shared-canvas" />
+              <FolderEmoji
+                folder={{ id: state.folderId || -1, ...state.folder }}             
+                isActive={false}               
+                sharedCanvasRef={sharedCanvasRef}               
+              />              
+            </div>
+            <SettingsFoldersEmoticonPicker
+              onClose={() => setIsReactionPickerOpened(false)}
+              isOpen={isReactionPickerOpened}
+              onSelectEmoji={selectEmoji}
+              observeIntersection={observeIntersection}              
+            />
+          </div>
         </div>
 
         {!isOnlyInvites && (
@@ -377,19 +437,6 @@ const SettingsFoldersEdit: FC<OwnProps & StateProps> = ({
 
         </div>
       </div>
-
-      <FloatingActionButton
-        isShown={Boolean(state.isTouched)}
-        disabled={state.isLoading}
-        onClick={handleSubmit}
-        ariaLabel={state.mode === 'edit' ? 'Save changes' : 'Create folder'}
-      >
-        {state.isLoading ? (
-          <Spinner color="white" />
-        ) : (
-          <Icon name="check" />
-        )}
-      </FloatingActionButton>
     </div>
   );
 };
@@ -399,6 +446,8 @@ export default memo(withGlobal<OwnProps>(
     const { listIds } = global.chats;
     const { byId, invites } = global.chatFolders;
     const chatListCount = Object.values(byId).reduce((acc, el) => acc + (el.isChatList ? 1 : 0), 0);
+    const availableReactions = global.reactions.availableReactions;
+    const folderSet = global.stickers.setsById[FOLDER_ICONS_SET_ID];
 
     return {
       loadedActiveChatIds: listIds.active,
@@ -408,6 +457,8 @@ export default memo(withGlobal<OwnProps>(
       maxInviteLinks: selectCurrentLimit(global, 'chatlistInvites'),
       maxChatLists: selectCurrentLimit(global, 'chatlistJoined'),
       chatListCount,
+      availableReactions,
+      folderSet
     };
   },
 )(SettingsFoldersEdit));

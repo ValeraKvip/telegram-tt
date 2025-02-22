@@ -2,7 +2,7 @@ import type { ApiFormattedText, ApiMessageEntity } from '../api/types';
 import { ApiMessageEntityTypes } from '../api/types';
 
 import { RE_LINK_TEMPLATE } from '../config';
-import { IS_EMOJI_SUPPORTED } from './windowEnvironment';
+import { IS_EMOJI_SUPPORTED, IS_FIREFOX } from './windowEnvironment';
 
 export const ENTITY_CLASS_BY_NODE_NAME: Record<string, ApiMessageEntityTypes> = {
   B: ApiMessageEntityTypes.Bold,
@@ -19,7 +19,7 @@ export const ENTITY_CLASS_BY_NODE_NAME: Record<string, ApiMessageEntityTypes> = 
   BLOCKQUOTE: ApiMessageEntityTypes.Blockquote,
 };
 
-const MAX_TAG_DEEPNESS = 3;
+const MAX_TAG_DEEPNESS = 15;//TODO Any reasons for this limit?
 
 export default function parseHtmlAsFormattedText(
   html: string, withMarkdownLinks = false, skipMarkdown = false,
@@ -28,7 +28,33 @@ export default function parseHtmlAsFormattedText(
   fragment.innerHTML = skipMarkdown ? html
     : withMarkdownLinks ? parseMarkdown(parseMarkdownLinks(html)) : parseMarkdown(html);
   fixImageContent(fragment);
-  const text = fragment.innerText.trim().replace(/\u200b+/g, '');
+  let text = '';
+
+  if (fragment.innerHTML.length && fragment.innerHTML[0] === '<') {
+    /**
+     * BUG-FIX "Markdown is broken when whitespace at the start is trimmed". 
+     * Steps to reproduce:
+     *    Try to send: || ~~A~~|| || ~~A~~||  
+     *    The First "A" - will be text, and the Second one will be a spoiler.
+     * Reason: 
+     *    Search for(parseHtmlAsFormattedText.ts):
+     *    ```const rawIndex = rawText.indexOf(node.textContent, textIndex);```
+     *    The problem occurs when the first spoiler " A" is searched. However, since it is trimmed, the second "A" is found instead.
+     * Solution:
+     *    Check if the first character of fragment.innerHTML is an HTML tag; if so (indicating it's Markdown), skip the trim.
+     *    However, '.trimEnd()' is still required; otherwise:
+     *    ```
+     *      console.log('A');
+     *    ```
+     *    won't work as expected (it seems the problem is on the Telegram server).
+     *    <pre>...</pre> - works
+     *    <pre>...\n</pre> - doesn't work.
+     *  */
+    text = fragment.innerText.trimEnd().replace(/\u200b+/g, '');
+  } else {
+    text = fragment.innerText.trim().replace(/\u200b+/g, '');
+  }
+
   const trimShift = fragment.innerText.indexOf(text[0]);
   let textIndex = -trimShift;
   let recursionDeepness = 0;
@@ -78,7 +104,14 @@ export function fixImageContent(fragment: HTMLDivElement) {
 
 function parseMarkdown(html: string) {
   let parsedHtml = html.slice(0);
-
+ 
+  // Strip redundant 'paste' tags.
+  // <span data-p="..."></span> are deleted in Chrome but need to remain in Firefox to allow the undo functionality to work.
+  if(IS_FIREFOX){
+    parsedHtml = parsedHtml.replace(/<span data-p="[^"]*"><\/span>/g, '');
+    parsedHtml = parsedHtml.replace(/<span data-p="[^"]*"><br><\/span>/g, '');
+  }
+  
   // Strip redundant nbsp's
   parsedHtml = parsedHtml.replace(/&nbsp;/g, ' ');
 
@@ -88,20 +121,19 @@ function parseMarkdown(html: string) {
   parsedHtml = parsedHtml.replace(/<br([^>]*)?>/g, '\n');
 
   // Strip redundant <div> tags
-  parsedHtml = parsedHtml.replace(/<\/div>(\s*)<div>/g, '\n');
-  parsedHtml = parsedHtml.replace(/<div>/g, '\n');
+
+  /**
+   * This line was a bug that removed all line breaks after a spoiler.
+   * For example: write a line => add any number of 'Enter' => write another line => make the first line a spoiler => send.
+   * All line breaks after the spoiler are removed.
+   */
+  //parsedHtml = parsedHtml.replace(/<\/div>(\s*)<div>/g, '\n');
+  
+  
+
+  parsedHtml = parsedHtml.replace(/<div>/g, '\n');//<blockquote><div>xxx</div></blockquote> =>  <blockquote>\nxxx</blockquote> 
   parsedHtml = parsedHtml.replace(/<\/div>/g, '');
 
-  // Pre
-  parsedHtml = parsedHtml.replace(/^`{3}(.*?)[\n\r](.*?[\n\r]?)`{3}/gms, '<pre data-language="$1">$2</pre>');
-  parsedHtml = parsedHtml.replace(/^`{3}[\n\r]?(.*?)[\n\r]?`{3}/gms, '<pre>$1</pre>');
-  parsedHtml = parsedHtml.replace(/[`]{3}([^`]+)[`]{3}/g, '<pre>$1</pre>');
-
-  // Code
-  parsedHtml = parsedHtml.replace(
-    /(?!<(code|pre)[^<]*|<\/)[`]{1}([^`\n]+)[`]{1}(?![^<]*<\/(code|pre)>)/g,
-    '<code>$2</code>',
-  );
 
   // Custom Emoji markdown tag
   if (!IS_EMOJI_SUPPORTED) {
@@ -113,23 +145,157 @@ function parseMarkdown(html: string) {
     '<img alt="$1" data-document-id="$2">',
   );
 
-  // Other simple markdown
-  parsedHtml = parsedHtml.replace(
-    /(?!<(code|pre)[^<]*|<\/)[*]{2}([^*\n]+)[*]{2}(?![^<]*<\/(code|pre)>)/g,
-    '<b>$2</b>',
-  );
-  parsedHtml = parsedHtml.replace(
-    /(?!<(code|pre)[^<]*|<\/)[_]{2}([^_\n]+)[_]{2}(?![^<]*<\/(code|pre)>)/g,
-    '<i>$2</i>',
-  );
-  parsedHtml = parsedHtml.replace(
-    /(?!<(code|pre)[^<]*|<\/)[~]{2}([^~\n]+)[~]{2}(?![^<]*<\/(code|pre)>)/g,
-    '<s>$2</s>',
-  );
-  parsedHtml = parsedHtml.replace(
-    /(?!<(code|pre)[^<]*|<\/)[|]{2}([^|\n]+)[|]{2}(?![^<]*<\/(code|pre)>)/g,
-    `<span data-entity-type="${ApiMessageEntityTypes.Spoiler}">$2</span>`,
-  );
+  const mdStack: Markdown[] = [];
+  let str = "";
+  for (let i = 0; i < parsedHtml.length;) {
+    let isMarkdown = false;
+
+    //Check slash escaping
+    if (parsedHtml[i] === '\\' && (i + 1 !== parsedHtml.length)) {
+      str += parsedHtml[i + 1];
+      i += 2;
+      continue;
+    }
+
+
+    //Skip all '>>' inside Expandable quote.
+    if (MD_EXPANDABLE_QUOTE.opened && parsedHtml.substring(i, i + QUOT_MARK.length) === QUOT_MARK) {
+      i += QUOT_MARK.length;
+      continue;
+    }
+
+    for (const markdown of markdowns) {
+      const { pattern, html, opened } = markdown;
+
+      if (opened) {
+        if (parsedHtml.substring(i, i + pattern.close.length) === pattern.close) {
+
+          //A single line-quote ends with '\n', except when the next line starts with '>>'
+          if (markdown === MD_SINGLE_QUOTE
+            && (i + 1 + pattern.open.length) < parsedHtml.length
+            && parsedHtml.substring(i + 1, i + 1 + pattern.open.length) === pattern.open) {
+            str += '\n'
+            i += pattern.open.length + pattern.close.length;
+            isMarkdown = true;
+            break;
+          }
+
+          //An expandable-quote ends with '||\n'; in other cases, it is a spoiler.
+          if (markdown === MD_EXPANDABLE_QUOTE) {
+            if (((i + pattern.close.length + 1 < parsedHtml.length) && parsedHtml[i + pattern.close.length + 1] !== '\n')) {
+              continue;
+            }
+          }
+
+          let top = mdStack[mdStack.length - 1];
+          if (top.html.open === html.open) {
+            mdStack.pop();
+            str += html.close;
+            markdown.opened = false;
+
+            isMarkdown = true;
+            i += pattern.close.length
+            break;
+          }
+          else {
+            const index = mdStack.indexOf(markdown);
+            if (index !== -1) {
+              for (let j = mdStack.length - 1; j > index; --j) {
+                str += mdStack[j].html.close;
+              }
+              str += html.close;
+
+              for (let j = index + 1; j < mdStack.length; ++j) {
+                str += mdStack[j].html.open;
+              }
+              mdStack.splice(index, 1);
+
+              markdown.opened = false;
+
+              isMarkdown = true;
+              i += pattern.close.length
+              break;
+
+            } else {
+              // mdStack.push(markdown);
+              // str += markdown.html.open;
+            }
+          }
+        } else {
+          for (const b of pattern.breaks) {
+            if (parsedHtml.substring(i, i + b.length) === b) {
+              const index = mdStack.indexOf(markdown);
+              if (index !== -1) {
+                mdStack.splice(index, 1);
+                markdown.opened = false;
+                const i = str.lastIndexOf(html.open);
+                if (i !== -1) {
+                  str = str.substring(0, i) + pattern.open + str.substring(i + html.open.length);
+                }
+              }
+              break;
+            }
+          };
+        }
+      } else {
+        if (parsedHtml.substring(i, i + pattern.open.length) === pattern.open) {
+          if (!mdStack.length) {
+            mdStack.push(markdown);
+            str += markdown.html.open;
+            markdown.opened = true;
+
+            isMarkdown = true;
+            i += pattern.open.length
+            break;
+          } else {
+            let top = mdStack[mdStack.length - 1];
+            if (top !== MD_CODE) {
+              mdStack.push(markdown);
+              str += markdown.html.open;
+              markdown.opened = true;
+
+              isMarkdown = true;
+              i += pattern.open.length
+              break;
+            } else {
+              //<code></code> cannot contain markdown inside.
+            }
+          }         
+        }
+      }
+    }
+
+    if (!isMarkdown) {
+      str += parsedHtml[i];
+      ++i;
+    }
+  }
+
+  //Clear stack in case if markdown was unpaired. 
+  while (mdStack.length > 0) {
+    const md = mdStack.pop()!;
+
+    if (md === MD_SINGLE_QUOTE) {
+      str += md.html.close;
+      continue;
+    }
+
+    const index = str.lastIndexOf(md.html.open);
+    if (index !== -1) {
+      str = str.substring(0, index) + md.pattern.open + str.substring(index + md.html.open.length);
+    }
+  }
+
+  /**
+   * replace defined codeblocks:
+   * ```javascript
+   * code
+   * ```
+   *  
+   */ 
+  parsedHtml = str.replace(/<pre>([a-zA-Z0-9+#]+)[\n\r]+(.+?)<\/pre>/gms, '<pre data-language="$1">$2</pre>');
+
+  markdowns.forEach(m => m.opened = false);  
 
   return parsedHtml;
 }
@@ -209,6 +375,18 @@ function getEntityDataFromNode(
     };
   }
 
+  if (type === ApiMessageEntityTypes.Blockquote) {
+    return {
+      index,
+      entity: {
+        type,
+        offset,
+        length,
+        canCollapse: (node as HTMLQuoteElement).dataset.collapsable === '1'
+      },
+    };
+  }
+
   return {
     index,
     entity: {
@@ -261,3 +439,131 @@ function getEntityTypeFromNode(node: ChildNode): ApiMessageEntityTypes | undefin
 
   return undefined;
 }
+
+
+
+type Markdown = {
+  pattern: {
+    open: string,
+    close: string,
+    breaks: string[]
+  },
+  html: {
+    open: string,
+    close: string;
+  },
+  opened: boolean
+}
+
+const QUOT_MARK = '&gt;&gt;';
+
+const MD_CODE = {
+  pattern: {
+    open: '`',
+    close: '`',
+    breaks: ['\n']
+  },
+  html: {
+    open: `<code>`,
+    close: '</code>'
+  },
+  opened: false
+};
+
+const MD_SINGLE_QUOTE = {
+  pattern: {
+    open: QUOT_MARK,//>>
+    close: '\n',
+    breaks: []
+  },
+  html: {
+    open: `<blockquote data-entity-type="${ApiMessageEntityTypes.Blockquote}">`,
+    close: '</blockquote>'
+  },
+  opened: false
+};
+
+const MD_EXPANDABLE_QUOTE = {
+  pattern: {
+    open: '**&gt;',
+    close: '||',
+    breaks: []
+  },
+  html: {
+    open: `<blockquote data-collapsable="1" data-entity-type="${ApiMessageEntityTypes.Blockquote}">`,
+    close: '</blockquote>'
+  },
+  opened: false
+};
+
+const MD_SPOILER = {
+  pattern: {
+    open: '||',
+    close: '||',
+    breaks: []
+  },
+  html: {
+    open: `<span data-entity-type="${ApiMessageEntityTypes.Spoiler}">`,
+    close: '</span>'
+  },
+  opened: false
+};
+
+const markdowns: Markdown[] = [
+  MD_EXPANDABLE_QUOTE,
+  MD_SPOILER,
+  {
+    pattern: {
+      open: '**',
+      close: '**',
+      breaks: []
+    },
+    html: {
+      open: `<b>`,
+      close: '</b>'
+    },
+    opened: false
+  },
+  {
+    pattern: {
+      open: '__',
+      close: '__',
+      breaks: []
+    },
+    html: {
+      open: `<i>`,
+      close: '</i>'
+    },
+    opened: false
+  },
+  {
+    pattern: {
+      open: '~~',
+      close: '~~',
+      breaks: []
+    },
+    html: {
+      open: `<s>`,
+      close: '</s>'
+    },
+    opened: false
+  },
+  {
+    pattern: {
+      open: '```',
+      close: '```',
+      breaks: []
+    },
+    html: {
+      open: `<pre>`,
+      close: '</pre>'
+    },
+    opened: false
+  },
+
+  MD_CODE,
+  MD_SINGLE_QUOTE,
+
+
+];
+

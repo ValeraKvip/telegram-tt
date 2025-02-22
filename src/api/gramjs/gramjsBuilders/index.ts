@@ -345,7 +345,13 @@ export function buildMtpMessageEntity(entity: ApiMessageEntity): GramJs.TypeMess
     case ApiMessageEntityTypes.Pre:
       return new GramJs.MessageEntityPre({ offset, length, language: entity.language || '' });
     case ApiMessageEntityTypes.Blockquote:
-      return new GramJs.MessageEntityBlockquote({ offset, length });
+      {
+        const param = { offset, length } as any;
+        if(entity.canCollapse){
+          param.collapsed = true;
+        }
+        return new GramJs.MessageEntityBlockquote(param);
+      }     
     case ApiMessageEntityTypes.TextUrl:
       return new GramJs.MessageEntityTextUrl({ offset, length, url: entity.url });
     case ApiMessageEntityTypes.Url:

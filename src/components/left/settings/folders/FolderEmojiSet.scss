@@ -1,0 +1,130 @@
+@use "../../../../styles/mixins";
+
+.FolderEmojiSet{
+    .symbol-set-name{
+        margin: auto;
+    }
+
+    .symbol-set-container {
+        display: grid !important;
+        justify-content: space-between;
+        grid-template-columns: repeat(auto-fill, var(--emoji-size, 4.5rem));
+        row-gap: 0.25rem;
+        column-gap: var(--symbol-set-gap-size, 0.625rem);
+        text-align: initial;
+      
+        @media (max-width: 600px) {
+          grid-gap: 0.5rem;
+        }
+      
+        &:not(.shown) {
+          display: block;
+        }
+      
+        &.closing {
+          transition: none;
+        }
+      
+        > .EmojiButton,
+        > .StickerButton {
+          margin: 0;
+        }
+      }
+
+      .symbol-set {
+        margin-bottom: 0.75rem;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+      
+        &-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          color: rgba(var(--color-text-secondary-rgb), 0.75);
+        }
+      
+        &-title {
+          display: flex;
+          gap: 0.5rem;
+          align-items: center;
+      
+          font-size: 1rem;
+          line-height: 1.6875rem;
+          font-weight: var(--font-weight-medium);
+          margin: 0;
+          padding: 0 0.25rem 0.125rem;
+          overflow: hidden;
+          unicode-bidi: plaintext;
+          z-index: 1;
+      
+          &-external {
+            color: var(--color-text);
+            text-align: start;
+            margin-right: 0.5rem;
+          }
+        }
+      
+        &-name {
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          text-align: center;
+        }
+      
+        &-amount {
+          font-size: 0.875rem;
+          font-weight: normal;
+          text-align: left;
+          color: rgba(var(--color-text-secondary-rgb), 0.75);
+          unicode-bidi: plaintext;
+          white-space: nowrap;
+        }
+      
+        &-chat {
+          background-color: var(--color-text-secondary);
+          color: var(--color-background);
+          border-radius: 1rem;
+          padding-inline: 0.25rem;
+          white-space: nowrap;
+        }
+      
+        &-add-button {
+          margin-bottom: 0.25rem;
+        }
+      
+        &-remove {
+          right: 0;
+          position: absolute;
+          font-size: 1rem;
+          cursor: var(--custom-cursor, pointer);
+          border-radius: 50%;
+          padding: 0.25rem;
+          transition: background-color 0.15s;
+      
+          &:active,
+          &:focus {
+            background-color: var(--color-interactive-element-hover);
+          }
+      
+          @media (hover: hover) {
+            &:hover {
+              background-color: var(--color-interactive-element-hover);
+            }
+          }
+        }
+      
+        &-button {
+          flex-shrink: 0;
+          width: 2.125rem !important;
+          height: 2.125rem;
+          margin: 0 0.25rem;
+          padding: 0;
+        }
+      
+        @include mixins.while-transition() {
+          overflow: hidden;
+        }
+      }
+      
+}

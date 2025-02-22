@@ -3,11 +3,11 @@ import type { FC } from '../../../lib/teact/teact';
 import React, {
   getIsHeavyAnimating,
   memo, useEffect, useLayoutEffect,
-  useRef, useState,
+  useRef, useSignal, useState,
 } from '../../../lib/teact/teact';
 import { getActions, withGlobal } from '../../../global';
 
-import type { ApiInputMessageReplyInfo } from '../../../api/types';
+import { ApiMessageEntityTypes, type ApiInputMessageReplyInfo } from '../../../api/types';
 import type { IAnchorPosition, ISettings, ThreadId } from '../../../types';
 import type { Signal } from '../../../util/signals';
 
@@ -37,6 +37,12 @@ import Icon from '../../common/icons/Icon';
 import Button from '../../ui/Button';
 import TextTimer from '../../ui/TextTimer';
 import TextFormatter from './TextFormatter.async';
+import { canCollapseQuote } from '../../../util/collapseQuote';
+import { getCaretPosition, setCaretPosition } from '../../../util/selection';
+import generateUniqueId from '../../../util/generateUniqueId';
+import useLang from '../../../hooks/useLang';
+import useUndoRed from './helpers/useUndoRed';
+
 
 const CONTEXT_MENU_CLOSE_DELAY_MS = 100;
 // Focus slows down animation, also it breaks transition layout in Chrome
@@ -58,6 +64,7 @@ type OwnProps = {
   isReady: boolean;
   isActive: boolean;
   getHtml: Signal<string>;
+  onReset: Signal;
   placeholder: string;
   timedPlaceholderLangKey?: string;
   timedPlaceholderDate?: number;
@@ -121,6 +128,7 @@ const MessageInput: FC<OwnProps & StateProps> = ({
   isReady,
   isActive,
   getHtml,
+  onReset,
   placeholder,
   timedPlaceholderLangKey,
   timedPlaceholderDate,
@@ -168,7 +176,10 @@ const MessageInput: FC<OwnProps & StateProps> = ({
   // eslint-disable-next-line no-null/no-null
   const absoluteContainerRef = useRef<HTMLDivElement>(null);
 
+  const [getNewInput, setNewInput] = useSignal<{ text: string }>({ text: '' });
+
   const lang = useOldLang();
+  const newLang = useLang();
   const isContextMenuOpenRef = useRef(false);
   const [isTextFormatterOpen, openTextFormatter, closeTextFormatter] = useFlag();
   const [textFormatterAnchorPosition, setTextFormatterAnchorPosition] = useState<IAnchorPosition>();
@@ -186,6 +197,13 @@ const MessageInput: FC<OwnProps & StateProps> = ({
   const handleTimerEnd = useLastCallback(() => {
     setShouldDisplayTimer(false);
   });
+
+  const und = useUndoRed(inputRef, onUpdate, getHtml, getNewInput);
+  const { addState, reset, caretPos } = und
+
+  useEffect(() => {
+    reset();
+  }, [onReset])
 
   useInputCustomEmojis(
     getHtml,
@@ -257,7 +275,9 @@ const MessageInput: FC<OwnProps & StateProps> = ({
 
       updateInputHeight(!html);
     }
-  }, [getHtml, isActive, updateInputHeight]);
+
+    setCaretPosition(inputRef.current!, caretPos);
+  }, [getHtml, isActive, updateInputHeight, caretPos]);
 
   const chatIdRef = useRef(chatId);
   chatIdRef.current = chatId;
@@ -273,6 +293,84 @@ const MessageInput: FC<OwnProps & StateProps> = ({
 
     focusEditableElement(inputRef.current!);
   });
+
+  const handleBlockquoteClick = (e: React.MouseEvent<HTMLDivElement>) => {
+
+    const blockquotes = e.currentTarget.querySelectorAll('blockquote');
+    const clickedBlockquote = Array.from(blockquotes).find(blockquote => blockquote === e.target);
+
+    if (clickedBlockquote) {
+      if (canCollapseQuote(clickedBlockquote.innerHTML)) {
+        const afterStyle = getComputedStyle(clickedBlockquote, '::after');
+
+        const afterWidth = parseFloat(afterStyle.width) + 5;
+        const afterHeight = parseFloat(afterStyle.height) + 5;
+
+        const rect = clickedBlockquote.getBoundingClientRect();
+
+        const afterElement = {
+          left: rect.right - afterWidth,
+          top: rect.top,
+          width: afterWidth,
+          height: afterHeight
+        };
+
+        const clickX = e.clientX;
+        const clickY = e.clientY;
+        if (
+          clickX >= afterElement.left &&
+          clickX <= afterElement.left + afterElement.width &&
+          clickY >= afterElement.top &&
+          clickY <= afterElement.top + afterElement.height
+        ) {
+          const range = document.createRange();
+
+          range.selectNode(clickedBlockquote);
+          const selection = window.getSelection();
+          if (!selection) {
+            return;
+          }
+          selection.removeAllRanges();
+          selection.addRange(range);
+          const attr = clickedBlockquote.getAttribute('data-entity-type');
+          const content = clickedBlockquote.innerHTML;
+          const collapse = clickedBlockquote.getAttribute('data-collapsable');
+          clickedBlockquote.remove();
+          const { showNotification } = getActions();
+
+          if (collapse) {
+            const blockquote = document.createElement('blockquote');
+            blockquote.className = 'collapsable';
+            blockquote.setAttribute('data-entity-type', attr || '');
+            blockquote.innerHTML = content;
+            range.insertNode(blockquote);
+            showNotification({
+              message: newLang('QuoteTextVisible'),
+            })
+          } else {
+            const blockquote = document.createElement('blockquote');
+            blockquote.className = 'collapsable';
+            blockquote.setAttribute('data-entity-type', attr || '');
+            blockquote.setAttribute('data-collapsable', '1');
+            blockquote.innerHTML = content;
+            range.insertNode(blockquote);
+            showNotification({
+              message: newLang('QuoteTextCollapsed'),
+            })
+          }
+
+          range.collapse();
+        }
+      } else {
+
+      }
+    }
+  }
+
+  const editableElementHandleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    focusInput();
+    handleBlockquoteClick(e);
+  }
 
   const handleCloseTextFormatter = useLastCallback(() => {
     closeTextFormatter();
@@ -406,7 +504,99 @@ const MessageInput: FC<OwnProps & StateProps> = ({
 
         closeTextFormatter();
         onSend();
+        return;
       }
+
+
+      //Handle correct quote formatting on "Enter" 
+      try {
+        const selection = getSelection();
+        if (selection && selection.rangeCount > 0) {
+          if (selection.type === 'Caret') {
+            const selectedRange = selection.getRangeAt(0);
+
+            if (selectedRange) {
+              const cAc = selectedRange.commonAncestorContainer;
+              let blockquote = cAc as HTMLElement;//cAc.parentElement;              
+              if (!blockquote) {
+                blockquote = cAc as any;
+                if (!blockquote) {
+                  return;
+                }
+              }
+
+              let safeExit = 1;
+              while (blockquote.nodeName !== 'BLOCKQUOTE'
+                && blockquote.nodeName !== 'CODE'
+                && blockquote.dataset?.entityType !== ApiMessageEntityTypes.Spoiler) {
+                if (blockquote == inputRef.current) {
+                  return;
+                }
+
+                if (!blockquote.parentElement || ++safeExit > 5) {
+                  return;
+                }
+
+                blockquote = blockquote.parentElement;
+              }
+
+
+              if (blockquote && (blockquote.nodeName === 'BLOCKQUOTE'
+                || blockquote.nodeName === 'CODE'
+                || blockquote.dataset?.entityType === ApiMessageEntityTypes.Spoiler)) {
+                const preCaretRange = selectedRange.cloneRange();
+                preCaretRange.selectNodeContents(blockquote);
+                preCaretRange.setEnd(selectedRange.endContainer, selectedRange.endOffset);
+                const caretPosition = preCaretRange.toString().length;
+
+                if (caretPosition === 0) {                 
+                  //At start                                  
+                  if (blockquote.parentNode !== null) {
+                    e.preventDefault();
+                    blockquote.parentNode.insertBefore(document.createElement('br'), blockquote)
+                  }
+                }
+                else if (caretPosition === blockquote.textContent?.length) {                 
+                  //At the end                               
+                  e.preventDefault();
+                  if (blockquote.parentNode !== null) {
+                    let element;
+                    if (blockquote.nextSibling) {
+                      element = document.createElement('span');
+                      blockquote.parentNode.insertBefore(element, blockquote.nextSibling)
+
+                    } else {
+                      element = document.createElement('div');
+                      element.append(document.createElement('br'));
+                      blockquote.parentNode.appendChild(element);
+                    }
+                    const range = document.createRange();
+                    range.setStartAfter(element);
+                    range.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                  }
+
+                } else {                  
+                  //At the middle                     
+                  const br = document.createElement('br');
+                  selectedRange.insertNode(br);
+
+                  const range = document.createRange();
+                  range.setStartAfter(br);
+                  range.collapse(true);
+                  selection.removeAllRanges();
+                  selection.addRange(range);
+                  e.preventDefault();
+                }
+                inputRef.current?.dispatchEvent(new Event('input', { bubbles: true }));
+              }
+            }
+          }
+        }
+      } catch (error) {       
+      }
+
     } else if (!isComposing && e.key === 'ArrowUp' && !html && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
       editLastMessage();
@@ -434,6 +624,92 @@ const MessageInput: FC<OwnProps & StateProps> = ({
         selection.removeAllRanges();
         focusEditableElement(inputRef.current!, true);
       }
+    }
+
+console.log("#U_CH",e)
+    handleBlockquotes(e);    
+    setNewInput({
+      //@ts-ignore
+      text: e.data
+    })   
+  }
+
+
+  /**
+   * Track the line count and text length of block quotes to decide whether to show or hide the 'collapse/expand' button.
+   */
+  function handleBlockquotes(e: ChangeEvent<HTMLDivElement>) {
+    try {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) {
+        return;
+      }
+
+      const blockquotes = e.currentTarget.querySelectorAll('blockquote');
+
+      for (let i = 0; i < blockquotes.length; i++) {
+        const blockquote = blockquotes[i];
+
+        if (blockquote.contains(selection.anchorNode)) {
+          if (canCollapseQuote(blockquote.innerHTML)) {
+            if (!blockquote.classList.contains('collapsable')) {
+              const caretPos = getCaretPosition(blockquote);
+              let t = blockquote.textContent;
+              let h = blockquote.innerHTML;
+              const range = document.createRange();
+
+              range.selectNode(blockquote);
+              selection.removeAllRanges();
+              selection.addRange(range);
+              const attr = blockquote.getAttribute('data-entity-type');
+              const content = blockquote.innerHTML;
+              blockquote.remove();
+
+              const id = generateUniqueId();
+
+
+              document.execCommand('insertHTML', false,
+                `<blockquote class="collapsable" data-entity-type="${attr}" data-t="${id}">${content}</blockquote>`);
+
+              const q = e.currentTarget.querySelector(`[data-t="${id}"]`);
+              console.log('#Xa:', caretPos, q, t, h);
+              if (q) {
+                setCaretPosition(q, caretPos);
+              }
+            }
+          } else {
+            if (blockquote.classList.contains('collapsable')) {
+              const caretPos = getCaretPosition(blockquote);
+              let t = blockquote.textContent;
+              let h = blockquote.innerHTML;
+              try {
+                const range = document.createRange();
+                range.setStartBefore(blockquote);
+                range.setEndAfter(blockquote);
+                selection.removeAllRanges();
+                selection.addRange(range);
+              } catch (e) {
+
+              }
+
+              const attr = blockquote.getAttribute('data-entity-type');
+              const content = blockquote.innerHTML;
+              blockquote.remove();
+              const id = generateUniqueId();
+
+              document.execCommand('insertHTML', false, `<blockquote data-entity-type="${attr}" data-t="${id}">${content}</blockquote>`);
+              const q = e.currentTarget.querySelector(`[data-t="${id}"]`);
+              console.log('#Xb:', caretPos, q, t, h);
+              if (q) {
+                setCaretPosition(q, caretPos);
+              }
+            }
+          }
+
+          break;
+        }
+      }
+    } catch (error) {
     }
   }
 
@@ -578,7 +854,7 @@ const MessageInput: FC<OwnProps & StateProps> = ({
             role="textbox"
             dir="auto"
             tabIndex={0}
-            onClick={focusInput}
+            onClick={editableElementHandleClick}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             onMouseDown={handleMouseDown}

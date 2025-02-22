@@ -571,6 +571,10 @@ export interface LangPair {
   'SettingsPerformanceStickers': undefined;
   'SettingsPerformanceMediaAutoplay': undefined;
   'SettingsPerformancePageTransitions': undefined;
+  'SettingsWallpaperBackgroundAnimations': undefined;
+  'QuoteTextCollapsed': undefined;
+  'QuoteTextVisible': undefined;
+  'EmojiSetSmileysAndPeople': undefined;
   'SettingsPerformanceSending': undefined;
   'SettingsPerformanceMediaViewer': undefined;
   'SettingsPerformanceComposer': undefined;

@@ -1063,6 +1063,35 @@ addActionHandler('editChatFolder', (global, actions, payload): ActionReturnType 
       },
     });
   }
+
+  const emojiId = folderUpdate.customEmoji;
+
+  //The API does not support custom emojis or emoticons (only an unknown subset). Therefore, they are saved locally.
+  if (!emojiId) {
+    if (global.folderCustomIcons && (id in global.folderCustomIcons)) {
+      const folderCustomIcons = global.folderCustomIcons;
+      if (folderUpdate.emoticon) {
+        folderCustomIcons[id] = folderUpdate.emoticon
+      } else {
+        delete folderCustomIcons[id];
+      }
+
+      return {
+        ...global,
+        folderCustomIcons: {
+          ...folderCustomIcons
+        }
+      }
+    }
+  } else {
+    return {
+      ...global,
+      folderCustomIcons: {
+        ...global.folderCustomIcons,
+        [id]: emojiId
+      }
+    }
+  }
 });
 
 addActionHandler('addChatFolder', async (global, actions, payload): Promise<void> => {
@@ -1088,6 +1117,20 @@ addActionHandler('addChatFolder', async (global, actions, payload): Promise<void
     id: newId,
     ...newFolder,
   };
+
+  const emojiId = folder.customEmoji;
+  if (emojiId) {
+    global = getGlobal();
+    global = {
+      ...global,
+      folderCustomIcons: {
+        ...global.folderCustomIcons,
+        [newId]: emojiId
+      }
+    }
+    setGlobal(global);
+  }
+
   await callApi('editChatFolder', {
     id: newId,
     folderUpdate,
@@ -1150,6 +1193,20 @@ addActionHandler('deleteChatFolder', async (global, actions, payload): Promise<v
 
   if (folder) {
     await callApi('deleteChatFolder', id);
+  }
+
+  global = getGlobal();
+  if (global.folderCustomIcons && (id in global.folderCustomIcons)) {
+    const folderCustomIcons = global.folderCustomIcons;
+    delete folderCustomIcons[id];
+    global = {
+      ...global,
+      folderCustomIcons: {
+        ...folderCustomIcons
+      }
+    }
+
+    setGlobal(global);
   }
 });
 
@@ -1512,15 +1569,15 @@ addActionHandler('openChatByUsername', async (global, actions, payload): Promise
     if (!isWebApp) {
       await openChatByUsername(
         global, actions, {
-          username,
-          threadId,
-          channelPostId: messageId,
-          startParam,
-          ref,
-          startAttach,
-          attach,
-          text,
-        }, tabId,
+        username,
+        threadId,
+        channelPostId: messageId,
+        startParam,
+        ref,
+        startAttach,
+        attach,
+        text,
+      }, tabId,
       );
       if (onChatChanged) {
         // @ts-ignore

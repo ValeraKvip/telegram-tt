@@ -1,3 +1,6 @@
+import generateUniqueId from "./generateUniqueId";
+import { IS_FIREFOX } from "./windowEnvironment";
+
 const extractorEl = document.createElement('div');
 
 export function insertHtmlInSelection(html: string) {
@@ -5,19 +8,24 @@ export function insertHtmlInSelection(html: string) {
 
   if (selection?.getRangeAt && selection.rangeCount) {
     const range = selection.getRangeAt(0);
-    range.deleteContents();
 
-    const fragment = range.createContextualFragment(html);
-    const lastInsertedNode = fragment.lastChild;
-    range.insertNode(fragment);
-    if (lastInsertedNode) {
-      range.setStartAfter(lastInsertedNode);
-      range.setEndAfter(lastInsertedNode);
-    } else {
-      range.collapse(false);
+    const commonAncestor = range.commonAncestorContainer;
+    let ancestorElement = (commonAncestor.nodeType === Node.ELEMENT_NODE ? commonAncestor : commonAncestor.parentNode);
+    if (!ancestorElement || !(ancestorElement instanceof Element)) {
+      ancestorElement = document;
     }
-    selection.removeAllRanges();
-    selection.addRange(range);
+
+
+    const id = generateUniqueId();
+    document.execCommand('insertHTML', false, `${html}<span data-p="${id}"></span>`);
+    const span = (ancestorElement as Element).querySelector(`[data-p="${id}"]`);
+    if (span) {
+      setCaretPosition(span, html.length)
+      range.collapse();
+      if(!IS_FIREFOX){
+        span.remove();
+      }     
+    }
   }
 }
 
@@ -63,11 +71,29 @@ export function getCaretPosition(element: HTMLElement) {
   caretRange.setEnd(range.endContainer, range.endOffset);
   caretPosition = caretRange.toString().length;
 
-  return caretPosition;
+  const lineBreaks = caretRange.cloneContents().querySelectorAll('br');
+
+  return caretPosition + lineBreaks.length
 }
 
 // https://stackoverflow.com/a/36953852
-export function setCaretPosition(element: Node, position: number) {
+export function setCaretPosition(element: Node, position: number) {  
+  if (element.nodeName === 'BR') {   
+    position = position - 1;
+    if(position === 0){
+      const range = document.createRange();
+      const selection = window.getSelection()!;
+      range.setStartAfter(element);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+
+      return -1;
+    }
+
+    return position;
+  }
+
   for (const node of element.childNodes) {
     if (node.nodeType === Node.TEXT_NODE) {
       if ((node as Text).length >= position) {

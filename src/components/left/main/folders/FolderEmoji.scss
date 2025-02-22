@@ -1,0 +1,22 @@
+.FolderEmoji {
+    pointer-events: none;
+        
+    .custom-emoji{
+      width: 100%;
+      height: 36px;
+    }
+
+    img{
+      width: 36px;
+      height: 36px;
+    }
+
+    .static-emoji{
+      width: 32px;
+      height: 32px;
+    }
+
+    .StickerButton {
+        margin: 0;
+    }
+}

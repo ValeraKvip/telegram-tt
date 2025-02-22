@@ -1,0 +1,23 @@
+.root {
+    --emoji-size: 2.25rem;
+  
+    height: 100%;
+    max-height: calc(100 * var(--vh));
+  
+    :global(.symbol-set-container) {
+      --symbol-set-gap-size: 0.625rem;
+    }
+  }
+  
+  .activated {
+    background-color: var(--color-interactive-element-hover);
+  }
+  
+  .searchInputWrapper {
+    margin: 0 0.375rem;
+    
+  }
+  
+  .SearchInput {
+    border-radius: var(--border-radius-default);
+  }

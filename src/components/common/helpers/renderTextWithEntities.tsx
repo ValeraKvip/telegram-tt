@@ -19,6 +19,7 @@ import CodeBlock from '../code/CodeBlock';
 import CustomEmoji from '../CustomEmoji';
 import SafeLink from '../SafeLink';
 import Spoiler from '../spoiler/Spoiler';
+import { canCollapseQuote } from '../../../util/collapseQuote';
 
 interface IOrganizedEntity {
   entity: ApiMessageEntity;
@@ -650,10 +651,15 @@ function processEntityAsHtml(
     case ApiMessageEntityTypes.CustomEmoji:
       return buildCustomEmojiHtmlFromEntity(rawEntityText, entity);
     case ApiMessageEntityTypes.Blockquote:
-      return `<blockquote
-        class="blockquote"
+      {
+        const showCollapse = canCollapseQuote(renderedContent)? 'class="collapsable blockquote"':'class="blockquote"';
+          // class="blockquote"
+        return `<blockquote
+       ${showCollapse}       
         data-entity-type="${ApiMessageEntityTypes.Blockquote}"
         >${renderedContent}</blockquote>`;
+      }
+    
     default:
       return renderedContent;
   }

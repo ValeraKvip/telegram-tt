@@ -30,6 +30,8 @@ import NewChat from './newChat/NewChat.async';
 import Settings from './settings/Settings.async';
 
 import './LeftColumn.scss';
+import LeftColumnAside from './main/LeftColumnAside';
+import useAppLayout from '../../hooks/useAppLayout';
 
 interface OwnProps {
   ref: RefObject<HTMLDivElement>;
@@ -52,6 +54,7 @@ type StateProps = {
   isClosingSearch?: boolean;
   archiveSettings: GlobalState['archiveSettings'];
   isArchivedStoryRibbonShown?: boolean;
+  foldersCount: number;
 };
 
 enum ContentType {
@@ -86,6 +89,7 @@ function LeftColumn({
   isClosingSearch,
   archiveSettings,
   isArchivedStoryRibbonShown,
+  foldersCount
 }: OwnProps & StateProps) {
   const {
     setGlobalSearchQuery,
@@ -98,6 +102,8 @@ function LeftColumn({
     openChat,
     requestNextSettingsScreen,
   } = getActions();
+
+  const { isMobile } = useAppLayout();
 
   const [content, setContent] = useState<LeftColumnContent>(LeftColumnContent.ChatList);
   const [settingsScreen, setSettingsScreen] = useState(SettingsScreens.Main);
@@ -546,20 +552,35 @@ function LeftColumn({
   }
 
   return (
-    <Transition
+    <div
       ref={ref}
-      name={shouldSkipHistoryAnimations ? 'none' : LAYERS_ANIMATION_NAME}
-      renderCount={RENDER_COUNT}
-      activeKey={contentType}
-      shouldCleanup
-      cleanupExceptionKey={ContentType.Main}
-      shouldWrap
-      wrapExceptionKey={ContentType.Main}
       id="LeftColumn"
-      withSwipeControl
     >
-      {renderContent}
-    </Transition>
+      {foldersCount > 0 && !isMobile && (
+        <LeftColumnAside
+          content={content}
+          isForumPanelOpen={isForumPanelOpen}
+          onContentChange={setContent}
+          onReset={handleReset}
+          onSettingsScreenSelect={handleSettingsScreenSelect}
+          foldersDispatch={foldersDispatch}
+        />
+      )}
+
+      <Transition
+        id="LeftColumnAsideRight"
+        name={shouldSkipHistoryAnimations ? 'none' : LAYERS_ANIMATION_NAME}
+        renderCount={RENDER_COUNT}
+        activeKey={contentType}
+        shouldCleanup
+        cleanupExceptionKey={ContentType.Main}
+        shouldWrap
+        wrapExceptionKey={ContentType.Main}
+        withSwipeControl>
+        {renderContent}
+      </Transition>
+
+    </div>
   );
 }
 
@@ -587,6 +608,9 @@ export default memo(withGlobal<OwnProps>(
       isAppUpdateAvailable,
       isElectronUpdateAvailable,
       archiveSettings,
+      chatFolders: {
+        byId: chatFoldersById,
+      }
     } = global;
 
     const currentChat = selectCurrentChat(global);
@@ -611,6 +635,7 @@ export default memo(withGlobal<OwnProps>(
       isClosingSearch: tabState.globalSearch.isClosing,
       archiveSettings,
       isArchivedStoryRibbonShown: isArchivedRibbonShown,
+      foldersCount: Object.keys(chatFoldersById).length
     };
   },
 )(LeftColumn));

@@ -175,6 +175,7 @@ import Icon from './icons/Icon';
 import ReactionAnimatedEmoji from './reactions/ReactionAnimatedEmoji';
 
 import './Composer.scss';
+import useUndoRed from '../middle/composer/helpers/useUndoRed';
 
 type ComposerType = 'messageList' | 'story';
 
@@ -423,6 +424,7 @@ const Composer: FC<OwnProps & StateProps> = ({
   const storyReactionRef = useRef<HTMLButtonElement>(null);
 
   const [getHtml, setHtml] = useSignal('');
+  const [onReset, fireRest] = useSignal();
   const [isMounted, setIsMounted] = useState(false);
   const getSelectionRange = useGetSelectionRange(editableInputCssSelector);
   const lastMessageSendTimeSeconds = useRef<number>();
@@ -740,7 +742,7 @@ const Composer: FC<OwnProps & StateProps> = ({
     if (!shouldPreserveInput) {
       setHtml('');
     }
-
+    fireRest(Math.random());
     setAttachments(MEMO_EMPTY_ARRAY);
     setNextText(undefined);
 
@@ -1838,6 +1840,7 @@ const Composer: FC<OwnProps & StateProps> = ({
             isReady={isReady}
             isActive={!hasAttachments}
             getHtml={getHtml}
+            onReset={onReset}
             placeholder={
               activeVoiceRecording && windowWidth <= SCREEN_WIDTH_TO_HIDE_PLACEHOLDER
                 ? ''

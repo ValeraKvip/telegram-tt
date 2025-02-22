@@ -17,6 +17,7 @@ import {
   FAVORITE_SYMBOL_SET_ID,
   POPULAR_SYMBOL_SET_ID,
   RECENT_SYMBOL_SET_ID,
+  SEARCH_SYMBOL_SET_ID,
   STICKER_SIZE_PICKER,
 } from '../../config';
 import { getReactionKey } from '../../global/helpers';
@@ -49,6 +50,7 @@ type OwnProps = {
   favoriteStickers?: ApiSticker[];
   isSavedMessages?: boolean;
   isStatusPicker?: boolean;
+  isFolderPicker?:boolean;
   isReactionPicker?: boolean;
   isCurrentUserPremium?: boolean;
   shouldHideHeader?: boolean;
@@ -91,6 +93,7 @@ const StickerSet: FC<OwnProps> = ({
   availableReactions,
   isSavedMessages,
   isStatusPicker,
+  isFolderPicker,
   isReactionPicker,
   isCurrentUserPremium,
   shouldHideHeader,
@@ -151,6 +154,8 @@ const StickerSet: FC<OwnProps> = ({
   const isRecent = stickerSet.id === RECENT_SYMBOL_SET_ID;
   const isFavorite = stickerSet.id === FAVORITE_SYMBOL_SET_ID;
   const isPopular = stickerSet.id === POPULAR_SYMBOL_SET_ID;
+  const isSearch = stickerSet.id === SEARCH_SYMBOL_SET_ID;
+ 
   const isEmoji = stickerSet.isEmoji;
   const isPremiumSet = !isRecent && selectIsSetPremium(stickerSet);
 
@@ -255,7 +260,7 @@ const StickerSet: FC<OwnProps> = ({
   const favoriteStickerIdsSet = useMemo(() => (
     favoriteStickers ? new Set(favoriteStickers.map(({ id }) => id)) : undefined
   ), [favoriteStickers]);
-  const withAddSetButton = !shouldHideHeader && !isRecent && isEmoji && !isPopular && !isChatEmojiSet
+  const withAddSetButton = !isSearch && !shouldHideHeader && !isRecent && isEmoji && !isPopular && !isChatEmojiSet
     && (!isInstalled || (!isCurrentUserPremium && !isSavedMessages));
   const addSetButtonText = useMemo(() => {
     if (isLocked) {
@@ -380,6 +385,7 @@ const StickerSet: FC<OwnProps> = ({
                 noPlay={!loadAndPlay}
                 isSavedMessages={isSavedMessages}
                 isStatusPicker={isStatusPicker}
+                isFolderPicker={isFolderPicker}   
                 canViewSet
                 noContextMenu={noContextMenus}
                 isCurrentUserPremium={isCurrentUserPremium}
@@ -430,7 +436,7 @@ const StickerSet: FC<OwnProps> = ({
 
 export default memo(StickerSet);
 
-function getItemsPerRowFallback(windowWidth: number): number {
+export function getItemsPerRowFallback(windowWidth: number): number {
   return windowWidth > MOBILE_WIDTH_THRESHOLD_PX
     ? ITEMS_PER_ROW_FALLBACK
     : (windowWidth < MINI_MOBILE_WIDTH_THRESHOLD_PX

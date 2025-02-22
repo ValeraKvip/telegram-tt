@@ -27,6 +27,22 @@
     }
   }
 
+  &.folder-emoji {
+    width: var(--custom-emoji-size);
+    height: var(--custom-emoji-size);
+    margin: 0.3125rem;
+    font-size: 2rem;
+
+    padding: 0;
+    color: var(--color-text);
+   
+    svg{
+      path{
+        fill:  var(--color-text-secondary);
+      }
+    }
+  }
+
   &.effect-emoji .sticker-locked {
     font-size: 0.75rem;
     width: 0.875rem;

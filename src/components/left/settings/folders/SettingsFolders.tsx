@@ -77,7 +77,12 @@ const SettingsFolders: FC<OwnProps> = ({
   const saveState = useCallback((newState: FoldersState) => {
     const { title } = newState.folder;
 
-    if (!title) {
+    /**
+     * BUGFIX "Creating a folder without a name."
+     * The "title" is an object of the type 'ApiFormattedText,'
+     * so the 'text' property should also be checked for null. 
+     */
+    if (!title || !title.text) {
       dispatch({ type: 'setError', payload: ERROR_NO_TITLE });
       return false;
     }

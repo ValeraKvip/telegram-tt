@@ -368,10 +368,10 @@ export interface ActionPayloads {
   loadRecommendedChatFolders: undefined;
   editChatFolder: {
     id: number;
-    folderUpdate: Omit<ApiChatFolder, 'id' | 'description' | 'emoticon'>;
+    folderUpdate: Omit<ApiChatFolder, 'id' | 'description' > & { customEmoji?: string };
   };
   addChatFolder: {
-    folder: ApiChatFolder;
+    folder: ApiChatFolder & { customEmoji?: string };
   } & WithTabId;
   deleteChatFolder: {
     id: number;

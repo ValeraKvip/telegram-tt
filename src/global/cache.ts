@@ -339,6 +339,7 @@ function reduceGlobal<T extends GlobalState>(global: T) {
       'savedReactionTags',
       'timezones',
       'availableEffectById',
+      'folderCustomIcons'
     ]),
     lastIsChatInfoShown: !getIsMobile() ? global.lastIsChatInfoShown : undefined,
     customEmojis: reduceCustomEmojis(global),

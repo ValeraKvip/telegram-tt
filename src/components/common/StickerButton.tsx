@@ -35,6 +35,7 @@ type OwnProps<T> = {
   noContextMenu?: boolean;
   isSavedMessages?: boolean;
   isStatusPicker?: boolean;
+  isFolderPicker?:boolean;
   canViewSet?: boolean;
   isSelected?: boolean;
   isCurrentUserPremium?: boolean;
@@ -73,6 +74,7 @@ const StickerButton = <T extends number | ApiSticker | ApiBotInlineMediaResult |
   noContextMenu,
   isSavedMessages,
   isStatusPicker,
+  isFolderPicker,
   canViewSet,
   observeIntersection,
   observeIntersectionForShowing,
@@ -211,11 +213,12 @@ const StickerButton = <T extends number | ApiSticker | ApiBotInlineMediaResult |
     isSelected && 'selected',
     isCustomEmoji && 'custom-emoji',
     isEffectEmoji && 'effect-emoji',
+    isFolderPicker && 'folder-emoji',
     className,
   );
 
   const contextMenuItems = useMemo(() => {
-    if (!shouldRenderContextMenu || noContextMenu || (isCustomEmoji && !isStatusPicker)) return [];
+    if (!isFolderPicker || !shouldRenderContextMenu || noContextMenu || (isCustomEmoji && !isStatusPicker)) return [];
 
     const items: ReactNode[] = [];
 
@@ -274,7 +277,7 @@ const StickerButton = <T extends number | ApiSticker | ApiBotInlineMediaResult |
     }
     return items;
   }, [
-    shouldRenderContextMenu, noContextMenu, isCustomEmoji, isStatusPicker, onUnfaveClick, onFaveClick, isLocked,
+    shouldRenderContextMenu, noContextMenu, isCustomEmoji, isStatusPicker,isFolderPicker, onUnfaveClick, onFaveClick, isLocked,
     onClick, canViewSet, onRemoveRecentClick, handleEmojiStatusExpiresClick, lang, handleContextUnfave,
     handleContextFave, isSavedMessages, handleSendScheduled, handleSendQuiet, handleOpenSet, handleContextRemoveRecent,
   ]);
@@ -341,7 +344,7 @@ const StickerButton = <T extends number | ApiSticker | ApiBotInlineMediaResult |
           getLayout={getLayout}
           className="sticker-context-menu"
           autoClose
-          withPortal={isStatusPicker}
+          withPortal={isStatusPicker || isFolderPicker}
           onClose={handleContextMenuClose}
           onCloseAnimationEnd={handleContextMenuHide}
         >

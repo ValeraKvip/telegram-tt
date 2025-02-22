@@ -32,6 +32,7 @@ import StoryRibbon from '../../story/StoryRibbon';
 import TabList from '../../ui/TabList';
 import Transition from '../../ui/Transition';
 import ChatList from './ChatList';
+import useAppLayout from '../../../hooks/useAppLayout';
 
 type OwnProps = {
   onSettingsScreenSelect: (screen: SettingsScreens) => void;
@@ -302,10 +303,9 @@ const ChatFolders: FC<OwnProps & StateProps> = ({
   });
 
   function renderCurrentTab(isActive: boolean) {
-    const activeFolder = Object.values(chatFoldersById)
-      .find(({ id }) => id === folderTabs![activeChatFolder].id);
+    const activeFolder = folderTabs ? Object.values(chatFoldersById)
+      .find(({ id }) => id === folderTabs[activeChatFolder]?.id) : undefined;
     const isFolder = activeFolder && !isInAllChatsFolder;
-
     return (
       <ChatList
         folderType={isFolder ? 'folder' : 'all'}
@@ -322,6 +322,7 @@ const ChatFolders: FC<OwnProps & StateProps> = ({
     );
   }
 
+  const { isMobile } = useAppLayout();
   const shouldRenderFolders = folderTabs && folderTabs.length > 1;
 
   return (
@@ -334,14 +335,14 @@ const ChatFolders: FC<OwnProps & StateProps> = ({
       )}
     >
       {shouldRenderStoryRibbon && <StoryRibbon isClosing={isStoryRibbonClosing} />}
-      {shouldRenderFolders ? (
+      {shouldRenderFolders  && isMobile ? (
         <TabList
           contextRootElementSelector="#LeftColumn"
           tabs={folderTabs}
           activeTab={activeChatFolder}
           onSwitchTab={handleSwitchTab}
         />
-      ) : shouldRenderPlaceholder ? (
+      ) : shouldRenderPlaceholder && isMobile ? (
         <div ref={placeholderRef} className="tabs-placeholder" />
       ) : undefined}
       <Transition

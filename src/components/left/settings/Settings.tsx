@@ -497,7 +497,8 @@ const Settings: FC<OwnProps> = ({
           currentScreen={currentScreen}
           onReset={handleReset}
           onScreenSelect={onScreenSelect}
-          editedFolderId={foldersState.folderId}
+          editedFolderState={foldersState}
+          editedFolderDispatch={foldersDispatch}
         />
         {renderCurrentSectionContent(isScreenActive, activeKey)}
       </>

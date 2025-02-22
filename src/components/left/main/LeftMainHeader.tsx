@@ -75,6 +75,7 @@ type StateProps =
     areChatsLoaded?: boolean;
     hasPasscode?: boolean;
     canSetPasscode?: boolean;
+    foldersCount: number;
   }
   & Pick<GlobalState, 'connectionState' | 'isSyncing' | 'isFetchingDifference'>;
 
@@ -101,6 +102,7 @@ const LeftMainHeader: FC<OwnProps & StateProps> = ({
   areChatsLoaded,
   hasPasscode,
   canSetPasscode,
+  foldersCount,
   onSearchQuery,
   onSelectSettings,
   onSelectContacts,
@@ -192,7 +194,7 @@ const LeftMainHeader: FC<OwnProps & StateProps> = ({
     lockScreen();
   });
 
-  const isSearchFocused = (!isDesktop && !isMessageListOpen) && (
+  const isSearchFocused = (!isMessageListOpen) && (//!isDesktop //Already fixed in the newest version
     Boolean(globalSearchChatId)
     || content === LeftColumnContent.GlobalSearch
     || content === LeftColumnContent.Contacts
@@ -253,28 +255,49 @@ const LeftMainHeader: FC<OwnProps & StateProps> = ({
     <div className="LeftMainHeader">
       <div id="LeftMainHeader" className="left-header" ref={headerRef}>
         {oldLang.isRtl && <div className="DropdownMenuFiller" />}
-        <DropdownMenu
-          trigger={MainButton}
-          footer={`${APP_NAME} ${versionString}`}
-          className={buildClassName(
-            'main-menu',
-            oldLang.isRtl && 'rtl',
-            shouldHideSearch && oldLang.isRtl && 'right-aligned',
-            shouldDisableDropdownMenuTransitionRef.current && oldLang.isRtl && 'disable-transition',
-          )}
-          forceOpen={isBotMenuOpen}
-          positionX={shouldHideSearch && oldLang.isRtl ? 'right' : 'left'}
-          transformOriginX={IS_ELECTRON && IS_MAC_OS && !isFullscreen ? 90 : undefined}
-          onTransitionEnd={oldLang.isRtl ? handleDropdownMenuTransitionEnd : undefined}
-        >
-          <LeftSideMenuItems
-            onSelectArchived={onSelectArchived}
-            onSelectContacts={onSelectContacts}
-            onSelectSettings={onSelectSettings}
-            onBotMenuOpened={markBotMenuOpen}
-            onBotMenuClosed={unmarkBotMenuOpen}
-          />
-        </DropdownMenu>
+        {
+          foldersCount > 0 && ! isMobile ? (
+            <>
+              {content !== LeftColumnContent.ChatList && (
+                <Button
+                  round
+                  size="smaller"
+                  color="translucent"
+                  onClick={onReset}
+                  ariaLabel={oldLang('AccDescrGoBack')}
+                >
+                  <Icon name="arrow-left" />
+                </Button>
+              )}
+            </>
+
+          ) :
+            (
+              <DropdownMenu
+                trigger={MainButton}
+                footer={`${APP_NAME} ${versionString}`}
+                className={buildClassName(
+                  'main-menu',
+                  oldLang.isRtl && 'rtl',
+                  shouldHideSearch && oldLang.isRtl && 'right-aligned',
+                  shouldDisableDropdownMenuTransitionRef.current && oldLang.isRtl && 'disable-transition',
+                )}
+                forceOpen={isBotMenuOpen}
+                positionX={shouldHideSearch && oldLang.isRtl ? 'right' : 'left'}
+                transformOriginX={IS_ELECTRON && IS_MAC_OS && !isFullscreen ? 90 : undefined}
+                onTransitionEnd={oldLang.isRtl ? handleDropdownMenuTransitionEnd : undefined}
+              >
+                <LeftSideMenuItems
+                  onSelectArchived={onSelectArchived}
+                  onSelectContacts={onSelectContacts}
+                  onSelectSettings={onSelectSettings}
+                  onBotMenuOpened={markBotMenuOpen}
+                  onBotMenuClosed={unmarkBotMenuOpen}
+                />
+              </DropdownMenu>
+            )
+        }
+
         <SearchInput
           inputId="telegram-search-input"
           resultsItemSelector=".LeftSearch .ListItem-button"
@@ -340,6 +363,11 @@ export default memo(withGlobal<OwnProps>(
       connectionState, isSyncing, isFetchingDifference,
     } = global;
     const { isConnectionStatusMinimized } = global.settings.byKey;
+    const {
+      chatFolders: {
+        byId: chatFoldersById,
+      }
+    } = global;
 
     return {
       searchQuery,
@@ -356,6 +384,7 @@ export default memo(withGlobal<OwnProps>(
       areChatsLoaded: Boolean(global.chats.listIds.active),
       hasPasscode: Boolean(global.passcode.hasPasscode),
       canSetPasscode: selectCanSetPasscode(global),
+      foldersCount: Object.keys(chatFoldersById).length
     };
   },
 )(LeftMainHeader));

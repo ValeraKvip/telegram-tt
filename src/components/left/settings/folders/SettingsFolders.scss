@@ -117,3 +117,31 @@
   flex-direction: column;
   overflow: hidden;
 }
+
+.folder-name-input-wrapper {
+  position: relative;
+
+  input {
+    width: 100%;
+    padding-right: 60px;
+  }
+
+  .EmojiPickerToggle {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    right: 0.875rem;
+    top: 50%;
+    transform: translate(0, -50%);
+    margin: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+
+    .custom-emoji {
+      width: 100%;
+      height: 100%;
+    }
+  }
+}

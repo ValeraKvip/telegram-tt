@@ -65,6 +65,7 @@ import {
   selectChatMessages,
   selectChatScheduledMessages,
   selectCommonBoxChatId,
+  selectCurrentChat,
   selectCurrentMessageList,
   selectFirstUnreadId,
   selectIsChatListed,
@@ -98,6 +99,13 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       const {
         chatId, id, message, shouldForceReply, wasDrafted, poll,
       } = update;
+
+      if (selectCurrentChat(global, getCurrentTabId())?.id === chatId) {
+        let wallpaperAnimation = (global.wallpaperAnimation || 0) + 1;
+        wallpaperAnimation = wallpaperAnimation > 100 ? 2 : wallpaperAnimation;
+        global = { ...global, wallpaperAnimation }
+      }
+
       global = updateWithLocalMedia(global, chatId, id, message);
       global = updateListedAndViewportIds(global, actions, message as ApiMessage);
 

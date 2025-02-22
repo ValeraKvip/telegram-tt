@@ -161,11 +161,15 @@ addActionHandler('openEditChatFolder', (global, actions, payload): ActionReturnT
   const chatFolder = selectChatFolder(global, folderId);
   if (!chatFolder) return;
 
+  const customEmoji = global.folderCustomIcons?.[folderId];
   actions.requestNextSettingsScreen({
     screen: isOnlyInvites ? SettingsScreens.FoldersEditFolderInvites : SettingsScreens.FoldersEditFolderFromChatList,
     foldersAction: {
       type: 'editFolder',
-      payload: chatFolder,
+      payload: {
+        ...chatFolder,
+        customEmoji
+      }
     },
     tabId,
   });

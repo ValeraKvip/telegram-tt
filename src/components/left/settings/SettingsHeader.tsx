@@ -16,17 +16,22 @@ import Button from '../../ui/Button';
 import ConfirmDialog from '../../ui/ConfirmDialog';
 import DropdownMenu from '../../ui/DropdownMenu';
 import MenuItem from '../../ui/MenuItem';
+import { FolderEditDispatch, FoldersState } from '../../../hooks/reducers/useFoldersReducer';
+import Spinner from '../../ui/Spinner';
+import useFlag from '../../../hooks/useFlag';
 
 type OwnProps = {
   currentScreen: SettingsScreens;
-  editedFolderId?: number;
+  editedFolderState?: FoldersState;
+  editedFolderDispatch?: FolderEditDispatch;
   onReset: () => void;
   onScreenSelect: (screen: SettingsScreens) => void;
 };
 
 const SettingsHeader: FC<OwnProps> = ({
   currentScreen,
-  editedFolderId,
+  editedFolderState,
+  editedFolderDispatch,
   onReset,
   onScreenSelect,
 }) => {
@@ -51,10 +56,10 @@ const SettingsHeader: FC<OwnProps> = ({
   }, []);
 
   const openDeleteFolderConfirmation = useCallback(() => {
-    if (!editedFolderId) return;
+    if (!editedFolderState?.folderId) return;
 
-    openDeleteChatFolderModal({ folderId: editedFolderId });
-  }, [editedFolderId, openDeleteChatFolderModal]);
+    openDeleteChatFolderModal({ folderId: editedFolderState.folderId });
+  }, [editedFolderState?.folderId, openDeleteChatFolderModal]);
 
   const handleSignOutMessage = useCallback(() => {
     closeSignOutConfirmation();
@@ -218,16 +223,38 @@ const SettingsHeader: FC<OwnProps> = ({
       case SettingsScreens.Folders:
         return <h3>{oldLang('Filters')}</h3>;
       case SettingsScreens.FoldersCreateFolder:
-        return <h3>{oldLang('FilterNew')}</h3>;
+        return (
+          <div className="settings-main-header">
+            <h3>{oldLang('FilterNew')}</h3>
+
+            {(editedFolderState?.isLoading || (editedFolderState && editedFolderState.isTouched && !editedFolderState.error)) && (
+              <Button
+                round
+                size="smaller"
+                color="translucent"
+                disabled={editedFolderState?.isLoading}
+                onClick={() => { editedFolderDispatch?.({ type: 'setDone' }) }}
+                ariaLabel={editedFolderState?.isLoading ? 'Updating' :  'Create folder'}
+              >
+                {editedFolderState?.isLoading ? (
+                  <Spinner color="white" />
+                ) : (
+                  <Icon name="check" style='color:var(--color-primary);' />
+                )}
+              </Button>
+            )}
+          </div>
+        );      
       case SettingsScreens.FoldersShare:
         return <h3>{oldLang('FolderLinkScreen.Title')}</h3>;
       case SettingsScreens.FoldersEditFolder:
       case SettingsScreens.FoldersEditFolderFromChatList:
       case SettingsScreens.FoldersEditFolderInvites:
+        const [isLoading, enableLoading,] = useFlag(false);//editedFolderState.isLoading resets before the screen changes.
         return (
           <div className="settings-main-header">
             <h3>{oldLang('FilterEdit')}</h3>
-            {Boolean(editedFolderId) && (
+            {editedFolderState && !editedFolderState.isTouched && editedFolderState.folderId && !isLoading && (
               <DropdownMenu
                 className="settings-more-menu"
                 trigger={SettingsMenuButton}
@@ -237,6 +264,22 @@ const SettingsHeader: FC<OwnProps> = ({
                   {oldLang('Delete')}
                 </MenuItem>
               </DropdownMenu>
+            )}
+            {(isLoading || (editedFolderState && editedFolderState.isTouched && !editedFolderState.error)) && (
+              <Button
+                round
+                size="smaller"
+                color="translucent"
+                disabled={isLoading}
+                onClick={() => { enableLoading(); editedFolderDispatch?.({ type: 'setDone' }) }}
+                ariaLabel={isLoading ? 'Updating' : (editedFolderState?.mode === 'edit' ? 'Save changes' : 'Create folder')}
+              >
+                {isLoading ? (
+                  <Spinner color="white" />
+                ) : (
+                  <Icon name="check" style='color:var(--color-primary);' />
+                )}
+              </Button>
             )}
           </div>
         );
@@ -248,7 +291,7 @@ const SettingsHeader: FC<OwnProps> = ({
           <h3>
             {oldLang(
               currentScreen === SettingsScreens.FoldersIncludedChats
-                  || currentScreen === SettingsScreens.FoldersIncludedChatsFromChatList
+                || currentScreen === SettingsScreens.FoldersIncludedChatsFromChatList
                 ? 'FilterInclude' : 'FilterExclude',
             )}
           </h3>
@@ -293,7 +336,12 @@ const SettingsHeader: FC<OwnProps> = ({
         onClick={onReset}
         ariaLabel={oldLang('AccDescrGoBack')}
       >
-        <Icon name="arrow-left" />
+        {editedFolderState?.isTouched ? (
+          <Icon name="close" />
+        ) : (
+          <Icon name="arrow-left" />
+        )}
+
       </Button>
       {renderHeaderContent()}
       <ConfirmDialog

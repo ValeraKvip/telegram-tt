@@ -24,6 +24,8 @@ import Icon from '../../common/icons/Icon';
 import Button from '../../ui/Button';
 
 import './TextFormatter.scss';
+import { canCollapseQuote } from '../../../util/collapseQuote';
+import { IS_FIREFOX } from '../../../util/windowEnvironment';
 
 export type OwnProps = {
   isOpen: boolean;
@@ -40,6 +42,7 @@ interface ISelectedTextFormats {
   strikethrough?: boolean;
   monospace?: boolean;
   spoiler?: boolean;
+  blockquote?: boolean;
 }
 
 const TEXT_FORMAT_BY_TAG_NAME: Record<string, keyof ISelectedTextFormats> = {
@@ -51,6 +54,7 @@ const TEXT_FORMAT_BY_TAG_NAME: Record<string, keyof ISelectedTextFormats> = {
   DEL: 'strikethrough',
   CODE: 'monospace',
   SPAN: 'spoiler',
+  BLOCKQUOTE: 'blockquote',
 };
 const fragmentEl = document.createElement('div');
 
@@ -103,7 +107,15 @@ const TextFormatter: FC<OwnProps> = ({
     }
 
     const selectedFormats: ISelectedTextFormats = {};
-    let { parentElement } = selectedRange.commonAncestorContainer;
+    const commonAncestorContainer = selectedRange.commonAncestorContainer;
+    let { parentElement } = commonAncestorContainer
+
+    if (parentElement?.id === EDITABLE_INPUT_ID) {
+      if (commonAncestorContainer) {
+        parentElement = commonAncestorContainer as HTMLElement;
+      }
+    }
+
     while (parentElement && parentElement.id !== EDITABLE_INPUT_ID) {
       const textFormat = TEXT_FORMAT_BY_TAG_NAME[parentElement.tagName];
       if (textFormat) {
@@ -153,7 +165,15 @@ const TextFormatter: FC<OwnProps> = ({
       return undefined;
     }
 
-    return selectedRange.commonAncestorContainer.parentElement;
+    const commonAncestorContainer = selectedRange.commonAncestorContainer;
+    let { parentElement } = commonAncestorContainer
+    if (parentElement?.id === EDITABLE_INPUT_ID) {
+      if (commonAncestorContainer) {
+        parentElement = commonAncestorContainer as HTMLElement;
+      }
+    }
+
+    return parentElement;
   });
 
   function updateInputStyles() {
@@ -204,17 +224,17 @@ const TextFormatter: FC<OwnProps> = ({
 
   const handleSpoilerText = useLastCallback(() => {
     if (selectedTextFormats.spoiler) {
-      const element = getSelectedElement();
-      if (
-        !selectedRange
-        || !element
-        || element.dataset.entityType !== ApiMessageEntityTypes.Spoiler
-        || !element.textContent
-      ) {
+      if (!selectedRange) {
         return;
       }
 
-      element.replaceWith(element.textContent);
+      const element = popupToMarkdown(getSelectedElement(), ApiMessageEntityTypes.Spoiler);
+      if (!element || !element.textContent) {
+        return;
+      }
+
+      //This will prevent the collapsing of multiline spoiler.
+      element.replaceWith(...element.childNodes);
       setSelectedTextFormats((selectedFormats) => ({
         ...selectedFormats,
         spoiler: false,
@@ -223,9 +243,11 @@ const TextFormatter: FC<OwnProps> = ({
       return;
     }
 
-    const text = getSelectedText();
+    
+    const { text, pre, post } = prepareTextForPacking(getSelectedText() || '');
+
     document.execCommand(
-      'insertHTML', false, `<span class="spoiler" data-entity-type="${ApiMessageEntityTypes.Spoiler}">${text}</span>`,
+      'insertHTML', false, `${pre}<span class="spoiler" data-entity-type="${ApiMessageEntityTypes.Spoiler}">${text}</span>${post}`,
     );
     onClose();
   });
@@ -268,17 +290,16 @@ const TextFormatter: FC<OwnProps> = ({
 
   const handleStrikethroughText = useLastCallback(() => {
     if (selectedTextFormats.strikethrough) {
-      const element = getSelectedElement();
-      if (
-        !selectedRange
-        || !element
-        || element.tagName !== 'DEL'
-        || !element.textContent
-      ) {
+      if (!selectedRange) {
         return;
       }
 
-      element.replaceWith(element.textContent);
+      const element = popupToMarkdown(getSelectedElement(), undefined, 'DEL');
+      if (!element || !element.textContent) {
+        return;
+      }
+
+      element.replaceWith(...element.childNodes);
       setSelectedTextFormats((selectedFormats) => ({
         ...selectedFormats,
         strikethrough: false,
@@ -294,17 +315,16 @@ const TextFormatter: FC<OwnProps> = ({
 
   const handleMonospaceText = useLastCallback(() => {
     if (selectedTextFormats.monospace) {
-      const element = getSelectedElement();
-      if (
-        !selectedRange
-        || !element
-        || element.tagName !== 'CODE'
-        || !element.textContent
-      ) {
+      if (!selectedRange) {
         return;
       }
 
-      element.replaceWith(element.textContent);
+      const element = popupToMarkdown(getSelectedElement(), undefined, 'CODE');
+      if (!element || !element.textContent) {
+        return;
+      }
+
+      element.replaceWith(...element.childNodes);
       setSelectedTextFormats((selectedFormats) => ({
         ...selectedFormats,
         monospace: false,
@@ -313,10 +333,107 @@ const TextFormatter: FC<OwnProps> = ({
       return;
     }
 
-    const text = getSelectedText(true);
-    document.execCommand('insertHTML', false, `<code class="text-entity-code" dir="auto">${text}</code>`);
+    const { text, pre, post } = prepareTextForPacking(getSelectedText() || '');
+
+    document.execCommand('insertHTML', false, `${pre}<code class="text-entity-code" dir="auto">${text}</code>${post}`);
     onClose();
   });
+
+
+
+  const handleBlockquoteText = useLastCallback(() => {
+    if (selectedTextFormats.blockquote) {
+      if (!selectedRange) {
+        return;
+      }
+
+      const element = popupToMarkdown(getSelectedElement(), ApiMessageEntityTypes.Blockquote);
+      if (!element || !element.textContent) {
+        return;
+      }
+
+      element.replaceWith(...element.childNodes);
+      setSelectedTextFormats((selectedFormats) => ({
+        ...selectedFormats,
+        blockquote: false,
+      }));
+
+      return;
+    }
+
+
+    const { text, pre, post } = prepareTextForPacking(getSelectedText() || '');
+
+    const showCollapse = canCollapseQuote(text) ? 'class="collapsable"' : '';
+
+    document.execCommand(
+      'insertHTML', false, `${pre}<blockquote ${showCollapse} data-entity-type="${ApiMessageEntityTypes.Blockquote}" data-c=".">${text}</blockquote>${post}`,
+    );
+
+
+    onClose();
+  });
+
+  const prepareTextForPacking = (text: string) => {
+    let pre = '';
+    let post = ''
+    if (text) {
+
+
+      if (IS_FIREFOX) {
+        text = text
+          .replace(/<span data-p="[^"]*"><\/span>/g, '')
+          .replace(/<span data-p="[^"]*"><br><\/span>/g, '');
+      }
+      text = text
+        .replace(/<div><br([^>]*)?><\/div>/g, '<br>')        
+        .replace(/<div><\/div>/g, '')
+        .replace(/<div>/g, '<br>')
+        .replace(/<\/div>/g, '')      
+
+      //No quote or spoiler should start from an empty line, but if the first line is wrapped in <div></div>, it now starts with <br>.
+      if (text.startsWith('<br>')) {
+        text = text.slice(4);
+      }
+
+      // Half-bug: users may mistakenly select line breaks (which are visually undetectable),
+      // especially if an emoji is at the beginning or the end.
+      // While this is not a bug, it may remove or add an extra line before or after the quote/spoiler.
+      //  This will keep line breaks outside of the block.
+      while (text.startsWith('<br>')) {
+        pre += '<br>'
+        text = text.slice(4);
+      }
+
+      while (text.endsWith('<br>')) {
+        post += '<br>'
+        text = text.slice(0, -4);
+      }
+    }
+     
+    return { text, pre, post }
+  }
+
+  // Unquoting/Un-spoiling/etc works only if the entire quote/spoiler/etc is selected;
+  //  it does nothing if only a part of the quote/spoiler/etc is selected. This is the fix.
+  const popupToMarkdown = (element: HTMLElement | null | undefined, type?: ApiMessageEntityTypes, tagName?: string) => {
+    if (!element) {
+      return null;
+    }
+
+    let safeExit = 1;
+    while (typeof type !== 'undefined' ? element.dataset.entityType !== type : element.tagName !== tagName) {
+      if (!element || element.id) {
+        return null;
+      }
+      element = element.parentElement
+      if (!element || ++safeExit > 15) {
+        return null;
+      }
+    }
+
+    return element;
+  }
 
   const handleLinkUrlConfirm = useLastCallback(() => {
     const formattedLinkUrl = (ensureProtocol(linkUrl) || '').split('%').map(encodeURI).join('%');
@@ -353,6 +470,7 @@ const TextFormatter: FC<OwnProps> = ({
       m: handleMonospaceText,
       s: handleStrikethroughText,
       p: handleSpoilerText,
+      q: handleBlockquoteText
     };
 
     const handler = HANDLERS_BY_KEY[getKeyFromEvent(e)];
@@ -464,6 +582,14 @@ const TextFormatter: FC<OwnProps> = ({
           onClick={handleMonospaceText}
         >
           <Icon name="monospace" />
+        </Button>
+        <Button
+          color="translucent"
+          ariaLabel="Blockquote text"
+          className={getFormatButtonClassName('blockquote')}
+          onClick={handleBlockquoteText}
+        >
+          <Icon name="quote" />
         </Button>
         <div className="TextFormatter-divider" />
         <Button color="translucent" ariaLabel={lang('TextFormat.AddLinkTitle')} onClick={openLinkControl}>

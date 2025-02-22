@@ -652,6 +652,10 @@
 "SettingsPerformanceStickers" = "Stickers and Emoji";
 "SettingsPerformanceMediaAutoplay" = "Media Autoplay";
 "SettingsPerformancePageTransitions" = "Page Transitions";
+"SettingsWallpaperBackgroundAnimations" = "Wallpaper animation";
+"QuoteTextCollapsed" = "Quote text will be collapsed";
+"QuoteTextVisible" = "Quote text will be fully visible";
+"EmojiSetSmileysAndPeople" = "Smileys & People";
 "SettingsPerformanceSending" = "Message Sending Animation";
 "SettingsPerformanceMediaViewer" = "Media Viewer Animations";
 "SettingsPerformanceComposer" = "Message Composer Animations";

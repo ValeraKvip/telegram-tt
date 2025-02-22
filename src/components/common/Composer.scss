@@ -1,4 +1,6 @@
+@use "sass:map";
 @use '../../styles/mixins';
+@use '../../styles/icons';
 
 .Composer {
   --base-height: 3.5rem;
@@ -764,6 +766,25 @@
   .WebPagePreview + .message-input-wrapper & {
     .form-control.overflown {
       margin-top: 0.75rem;
+    }
+  }
+
+  blockquote{
+    display: table;
+
+    &.collapsable{  
+      &::after{
+        cursor: pointer;
+        @include icons.icon;
+        content: map.get(icons.$icons-map, "collapse");
+        font-size: 0.7rem;//??
+      }
+  
+      &[data-collapsable]{      
+        &::after{      
+          content: map.get(icons.$icons-map, "expand");
+        }    
+      }
     }
   }
 }
